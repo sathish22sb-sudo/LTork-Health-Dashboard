@@ -7,14 +7,19 @@ const API = (() => {
     { name: 'Live API', url: 'https://api.ltorkcontrols.com/health', key: 'live' },
   ]
 
-  const TIMEOUT_MS = 10000
+  const TIMEOUT_MS = 12000
 
   function getEndpoints() {
     return ENDPOINTS
   }
 
+  function getProxyUrl() {
+    const loc = window.location
+    return `${loc.protocol}//${loc.host}/api/health`
+  }
+
   /**
-   * Check a single health endpoint.
+   * Check a single health endpoint via the serverless proxy.
    * Returns: { name, key, url, online, statusCode, responseTime, timestamp, error }
    */
   async function checkHealth(endpoint) {
@@ -23,7 +28,8 @@ const API = (() => {
     const start = performance.now()
 
     try {
-      const res = await fetch(endpoint.url, {
+      const proxyUrl = `${getProxyUrl()}?url=${encodeURIComponent(endpoint.url)}`
+      const res = await fetch(proxyUrl, {
         method: 'GET',
         signal: controller.signal,
         cache: 'no-store',
@@ -31,23 +37,30 @@ const API = (() => {
       const elapsed = Math.round(performance.now() - start)
       clearTimeout(timer)
 
-      const contentType = res.headers.get('content-type') || ''
-      let body = null
-      if (contentType.includes('application/json')) {
-        body = await res.json().catch(() => null)
-      }
+      const data = await res.json().catch(() => null)
 
-      const online = res.ok && body && body.status === 'ok'
+      if (!data) {
+        return {
+          name: endpoint.name,
+          key: endpoint.key,
+          url: endpoint.url,
+          online: false,
+          statusCode: 0,
+          responseTime: elapsed,
+          timestamp: new Date().toISOString(),
+          error: 'Invalid proxy response',
+        }
+      }
 
       return {
         name: endpoint.name,
         key: endpoint.key,
         url: endpoint.url,
-        online,
-        statusCode: res.status,
-        responseTime: elapsed,
-        timestamp: new Date().toISOString(),
-        error: online ? null : `Status: ${res.status}`,
+        online: data.online,
+        statusCode: data.statusCode,
+        responseTime: data.responseTime || elapsed,
+        timestamp: data.timestamp || new Date().toISOString(),
+        error: data.error || null,
       }
     } catch (err) {
       const elapsed = Math.round(performance.now() - start)
