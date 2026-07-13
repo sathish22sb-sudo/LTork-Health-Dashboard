@@ -2,10 +2,13 @@
 @media (max-width: 900px) {
   .header { padding: 14px 20px; }
   .main { padding: 20px; }
-  .summary-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .summary-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; }
   .api-grid { grid-template-columns: 1fr; }
   .btn-label { display: none; }
   .btn-primary, .btn-ghost { padding: 8px 10px; }
+  .detail-stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .detail-charts-grid { grid-template-columns: 1fr; }
+  .modal-panel { width: 96vw; max-height: 92vh; }
 }
 
 /* ── MOBILE ───────────────────────────────────────────────────────────────── */
@@ -21,15 +24,22 @@
   .summary-card { padding: 14px; gap: 10px; }
   .summary-icon { width: 36px; height: 36px; }
   .summary-icon svg { width: 16px; height: 16px; }
-  .summary-value { font-size: 1.2rem; }
-  .summary-label { font-size: 0.65rem; }
+  .summary-value { font-size: 1.15rem; }
+  .summary-label { font-size: 0.63rem; }
   .api-card { padding: 18px; }
   .api-card-header { flex-direction: column; gap: 10px; }
   .api-url { font-size: 0.65rem; }
   .api-metrics { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .api-extra-stats { grid-template-columns: repeat(2, 1fr); }
   .metric-value { font-size: 0.82rem; }
   .footer { font-size: 0.7rem; padding: 16px; }
   .toast { max-width: calc(100vw - 32px); font-size: 0.78rem; }
+  .detail-stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .detail-charts-grid { grid-template-columns: 1fr; gap: 12px; }
+  .modal-header { padding: 16px; }
+  .modal-body { padding: 16px; }
+  .detail-table { font-size: 0.72rem; }
+  .detail-table th, .detail-table td { padding: 6px 8px; }
 }
 
 /* ── VERY SMALL ───────────────────────────────────────────────────────────── */

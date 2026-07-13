@@ -76,12 +76,21 @@
         </div>
       </div>
       <div class="summary-card">
+        <div class="summary-icon checks">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        </div>
+        <div class="summary-info">
+          <span class="summary-value" id="total-checks">0</span>
+          <span class="summary-label">Total Checks</span>
+        </div>
+      </div>
+      <div class="summary-card">
         <div class="summary-icon time">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
         </div>
         <div class="summary-info">
-          <span class="summary-value" id="last-refresh">—</span>
-          <span class="summary-label">Last Refresh</span>
+          <span class="summary-value" id="avg-rt">—</span>
+          <span class="summary-label">Avg Response</span>
         </div>
       </div>
     </section>
@@ -106,10 +115,100 @@
   <footer class="footer">
     <span>LTork Controls API Health Monitor</span>
     <span class="footer-sep">|</span>
-    <span id="app-version">v1.0.0</span>
+    <span id="app-version">v2.0.0</span>
     <span class="footer-sep">|</span>
     <span id="footer-year"></span>
   </footer>
+
+  <!-- Detail Modal -->
+  <div class="detail-modal" id="detail-modal">
+    <div class="modal-overlay"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <div class="modal-header-left">
+          <div class="modal-title"></div>
+          <div class="modal-subtitle"></div>
+        </div>
+        <button class="modal-close" title="Close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Summary Stats -->
+        <div class="detail-stats-grid">
+          <div class="detail-stat-card">
+            <span class="label">Total Checks</span>
+            <span class="value" id="detail-total-checks">0</span>
+          </div>
+          <div class="detail-stat-card">
+            <span class="label">Online</span>
+            <span class="value green" id="detail-online">0</span>
+          </div>
+          <div class="detail-stat-card">
+            <span class="label">Offline</span>
+            <span class="value red" id="detail-offline">0</span>
+          </div>
+          <div class="detail-stat-card">
+            <span class="label">Uptime</span>
+            <span class="value green" id="detail-uptime">100%</span>
+          </div>
+          <div class="detail-stat-card">
+            <span class="label">Avg Response</span>
+            <span class="value accent" id="detail-avg-rt">0ms</span>
+          </div>
+          <div class="detail-stat-card">
+            <span class="label">Min Response</span>
+            <span class="value green" id="detail-min-rt">0ms</span>
+          </div>
+          <div class="detail-stat-card">
+            <span class="label">Max Response</span>
+            <span class="value amber" id="detail-max-rt">0ms</span>
+          </div>
+          <div class="detail-stat-card">
+            <span class="label">P95 Response</span>
+            <span class="value accent" id="detail-p95-rt">0ms</span>
+          </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="detail-charts-grid">
+          <div class="detail-chart-box full-width">
+            <div class="detail-chart-title">Response Time Over Time</div>
+            <canvas id="detail-chart-rt"></canvas>
+          </div>
+          <div class="detail-chart-box">
+            <div class="detail-chart-title">Checks by Hour</div>
+            <canvas id="detail-chart-hourly"></canvas>
+          </div>
+          <div class="detail-chart-box">
+            <div class="detail-chart-title">Response Time Distribution</div>
+            <canvas id="detail-chart-dist"></canvas>
+          </div>
+          <div class="detail-chart-box full-width">
+            <div class="detail-chart-title">Daily Uptime Trend</div>
+            <canvas id="detail-chart-uptime"></canvas>
+          </div>
+        </div>
+
+        <!-- History Table -->
+        <div class="detail-table-section">
+          <div class="detail-table-title">Check History (latest 100)</div>
+          <div class="detail-table-wrap">
+            <table class="detail-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Status</th>
+                  <th>HTTP</th>
+                  <th>Response</th>
+                  <th>Error</th>
+                </tr>
+              </thead>
+              <tbody id="detail-history-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- Scripts -->
   <script src="js/storage.js"></script>

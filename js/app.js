@@ -1,17 +1,15 @@
-/* ── APP MODULE ────────────────────────────────────────────────────────────── */
-/* Main orchestrator: init, polling, UI rendering, state management.           */
-
 const App = (() => {
-  const POLL_INTERVAL_MS = 180000 // 3 minutes
+  const POLL_INTERVAL_MS = 180000
   let pollTimer = null
   let countdownTimer = null
   let countdownSeconds = 180
   let isRefreshing = false
+  let activeModal = null
 
-  /* ── INIT ──────────────────────────────────────────────────────────────── */
   function init() {
     applyTheme(Storage.getTheme())
-    renderCards()
+    renderSummaryCards()
+    renderApiCards()
     updateFooterYear()
     Email.init()
     Notifications.requestPermission()
@@ -20,7 +18,6 @@ const App = (() => {
     startPolling()
   }
 
-  /* ── EVENTS ────────────────────────────────────────────────────────────── */
   function bindEvents() {
     document.getElementById('refresh-btn').addEventListener('click', manualRefresh)
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme)
@@ -28,11 +25,9 @@ const App = (() => {
     document.getElementById('search-input').addEventListener('input', filterCards)
   }
 
-  /* ── THEME ─────────────────────────────────────────────────────────────── */
   function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme)
     Storage.setTheme(theme)
-    // Redraw sparklines with new theme colors
     setTimeout(() => redrawAllCharts(), 100)
   }
 
@@ -41,13 +36,46 @@ const App = (() => {
     applyTheme(current === 'dark' ? 'light' : 'dark')
   }
 
-  /* ── CARD RENDERING ────────────────────────────────────────────────────── */
-  function renderCards() {
+  /* ── SUMMARY CARDS ───────────────────────────────────────────────────── */
+  function renderSummaryCards() {
+    const endpoints = API.getEndpoints()
+    const allHistory = Storage.getAllHistory()
+    let totalChecks = 0, healthy = 0, down = 0, avgRT = 0, rtCount = 0
+
+    endpoints.forEach(ep => {
+      const h = allHistory[ep.key] || []
+      totalChecks += h.length
+      h.forEach(c => {
+        if (c.online) healthy++
+        else down++
+        if (c.responseTime > 0) { avgRT += c.responseTime; rtCount++ }
+      })
+    })
+    avgRT = rtCount > 0 ? Math.round(avgRT / rtCount) : 0
+
+    document.getElementById('total-apis').textContent = endpoints.length
+    document.getElementById('healthy-count').textContent = endpoints.length - down
+    document.getElementById('down-count').textContent = down > 0 ? 1 : 0
+    document.getElementById('total-checks').textContent = totalChecks.toLocaleString()
+    document.getElementById('avg-rt').textContent = avgRT > 0 ? `${avgRT}ms` : '—'
+  }
+
+  function updateSummaryFromResults(results) {
+    const endpoints = API.getEndpoints()
+    const healthy = results.filter(r => r.online).length
+    const down = results.filter(r => !r.online).length
+
+    document.getElementById('healthy-count').textContent = healthy
+    document.getElementById('down-count').textContent = down
+  }
+
+  /* ── API CARDS ───────────────────────────────────────────────────────── */
+  function renderApiCards() {
     const grid = document.getElementById('api-cards-grid')
     const endpoints = API.getEndpoints()
 
     grid.innerHTML = endpoints.map(ep => `
-      <div class="api-card unknown" id="card-${ep.key}" data-name="${ep.name.toLowerCase()}" data-url="${ep.url}">
+      <div class="api-card unknown" id="card-${ep.key}" data-key="${ep.key}" data-name="${ep.name.toLowerCase()}" data-url="${ep.url}">
         <div class="api-card-header">
           <div class="api-card-info">
             <div class="api-env-name">${ep.name}</div>
@@ -72,6 +100,7 @@ const App = (() => {
             <span class="metric-value" id="lc-${ep.key}">—</span>
           </div>
         </div>
+        <div class="api-extra-stats" id="extra-stats-${ep.key}"></div>
         <div class="sparkline-container">
           <canvas id="chart-${ep.key}"></canvas>
           <span class="sparkline-label">Response Time</span>
@@ -83,11 +112,47 @@ const App = (() => {
           </div>
           <span class="uptime-pct good" id="uptime-pct-${ep.key}">100%</span>
         </div>
+        <button class="btn-detail" data-key="${ep.key}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+          View Details
+        </button>
       </div>
     `).join('')
+
+    grid.querySelectorAll('.btn-detail').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation()
+        openDetailModal(btn.dataset.key)
+      })
+    })
   }
 
-  /* ── REFRESH ───────────────────────────────────────────────────────────── */
+  function updateExtraStats(key, history) {
+    const el = document.getElementById(`extra-stats-${key}`)
+    if (!el || history.length === 0) { if (el) el.innerHTML = ''; return }
+
+    const stats = Storage.calcStats(history)
+    el.innerHTML = `
+      <div class="extra-stat">
+        <span class="extra-stat-value">${stats.totalChecks}</span>
+        <span class="extra-stat-label">Checks</span>
+      </div>
+      <div class="extra-stat">
+        <span class="extra-stat-value">${stats.avgResponseTime}ms</span>
+        <span class="extra-stat-label">Avg RT</span>
+      </div>
+      <div class="extra-stat">
+        <span class="extra-stat-value">${stats.p95ResponseTime}ms</span>
+        <span class="extra-stat-label">P95</span>
+      </div>
+      <div class="extra-stat">
+        <span class="extra-stat-value">${stats.maxResponseTime}ms</span>
+        <span class="extra-stat-label">Max RT</span>
+      </div>
+    `
+  }
+
+  /* ── REFRESH ─────────────────────────────────────────────────────────── */
   async function refreshAll() {
     if (isRefreshing) return
     isRefreshing = true
@@ -98,7 +163,8 @@ const App = (() => {
       for (const result of results) {
         processResult(result)
       }
-      updateSummary(results)
+      renderSummaryCards()
+      updateSummaryFromResults(results)
       updateLastRefresh()
     } catch (e) {
       console.error('Refresh failed:', e)
@@ -114,33 +180,25 @@ const App = (() => {
     const { key, name, url, online, statusCode, responseTime, timestamp, error } = result
     const prevStatus = Storage.getLastStatus(key)
 
-    // Store check
     Storage.addCheck(key, { online, statusCode, responseTime, timestamp, error })
     const history = Storage.getHistory(key)
 
-    // Update card UI
     updateCard(result, history)
+    updateExtraStats(key, history)
 
-    // State change detection for alerts
     const currentStatus = online ? 'online' : 'offline'
     if (prevStatus !== null && prevStatus !== currentStatus) {
-      // Status changed!
       if (prevStatus === 'online' && !online) {
-        // Went DOWN
         Notifications.showToast(`${name} is DOWN`, 'error')
         Notifications.sendBrowserNotification(`${name} is DOWN`, `${url} is unreachable.`)
         Email.sendDownAlert(name, url, error || 'Server is unreachable or returned an unexpected response.')
       } else if (prevStatus === 'offline' && online) {
-        // Recovered
         Notifications.showToast(`${name} is back ONLINE`, 'success')
         Notifications.sendBrowserNotification(`${name} Recovered`, `${url} is responding normally again.`)
         Email.sendRecoveryAlert(name, url)
       }
     } else if (prevStatus === null) {
-      // First check — toast status
-      if (!online) {
-        Notifications.showToast(`${name} is DOWN`, 'error')
-      }
+      if (!online) Notifications.showToast(`${name} is DOWN`, 'error')
     }
 
     Storage.setLastStatus(key, currentStatus)
@@ -157,29 +215,23 @@ const App = (() => {
 
     if (!card) return
 
-    // Card state class
     card.className = card.className.replace(/(online|offline|checking|unknown)/g, '')
     card.classList.add(online ? 'online' : 'offline')
 
-    // Badge
     badge.className = badge.className.replace(/(online|offline|checking|unknown)/g, '')
     badge.classList.add(online ? 'online' : 'offline')
     badgeText.textContent = online ? 'Online' : 'Offline'
 
-    // HTTP status
     httpEl.textContent = statusCode || '—'
     httpEl.className = 'metric-value ' + (online ? 'green' : 'red')
 
-    // Response time
     rtEl.textContent = responseTime ? `${responseTime}ms` : '—'
     rtEl.className = 'metric-value ' + (responseTime < 500 ? 'green' : responseTime < 2000 ? 'amber' : 'red')
 
-    // Last checked
     lcEl.textContent = formatRelativeTime(timestamp)
     lcEl.className = 'metric-value'
 
-    // Uptime
-    const uptime = API.calcUptime(history)
+    const uptime = Storage.calcStats(history).uptimePct
     const uptimePct = document.getElementById(`uptime-pct-${key}`)
     const uptimeBar = document.getElementById(`uptime-bar-${key}`)
     if (uptimePct) {
@@ -191,25 +243,86 @@ const App = (() => {
       uptimeBar.className = 'uptime-bar-fill ' + (uptime >= 99 ? 'good' : uptime >= 95 ? 'warn' : 'bad')
     }
 
-    // Sparkline
     const canvas = document.getElementById(`chart-${key}`)
     if (canvas) Charts.drawSparkline(canvas, history)
   }
 
-  function updateSummary(results) {
-    const healthy = results.filter(r => r.online).length
-    const down = results.filter(r => !r.online).length
+  /* ── DETAIL MODAL ────────────────────────────────────────────────────── */
+  function openDetailModal(key) {
+    const endpoints = API.getEndpoints()
+    const ep = endpoints.find(e => e.key === key)
+    if (!ep) return
 
-    document.getElementById('healthy-count').textContent = healthy
-    document.getElementById('down-count').textContent = down
+    const history = Storage.getHistory(key)
+    const stats = Storage.calcStats(history)
+    const hourly = Storage.calcHourlyDistribution(history)
+    const rtBuckets = Storage.calcResponseTimeBuckets(history)
+    const dailyUptime = Storage.calcDailyUptime(history)
+
+    const modal = document.getElementById('detail-modal')
+    modal.querySelector('.modal-title').textContent = `${ep.name} — Detailed Insights`
+    modal.querySelector('.modal-subtitle').textContent = ep.url
+
+    document.getElementById('detail-total-checks').textContent = stats.totalChecks
+    document.getElementById('detail-online').textContent = stats.onlineChecks
+    document.getElementById('detail-offline').textContent = stats.offlineChecks
+    document.getElementById('detail-uptime').textContent = `${stats.uptimePct}%`
+    document.getElementById('detail-avg-rt').textContent = `${stats.avgResponseTime}ms`
+    document.getElementById('detail-min-rt').textContent = `${stats.minResponseTime}ms`
+    document.getElementById('detail-max-rt').textContent = `${stats.maxResponseTime}ms`
+    document.getElementById('detail-p95-rt').textContent = `${stats.p95ResponseTime}ms`
+
+    const tbody = document.getElementById('detail-history-tbody')
+    tbody.innerHTML = ''
+    const sorted = [...history].reverse().slice(0, 100)
+    sorted.forEach(entry => {
+      const tr = document.createElement('tr')
+      const d = new Date(entry.timestamp)
+      const timeStr = d.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
+      tr.innerHTML = `
+        <td class="td-time">${timeStr}</td>
+        <td><span class="status-dot-inline ${entry.online ? 'online' : 'offline'}"></span>${entry.online ? 'Online' : 'Offline'}</td>
+        <td class="td-mono">${entry.statusCode || '—'}</td>
+        <td class="td-mono">${entry.responseTime}ms</td>
+        <td class="td-error">${entry.error || '—'}</td>
+      `
+      tbody.appendChild(tr)
+    })
+
+    modal.classList.add('open')
+    document.body.style.overflow = 'hidden'
+    activeModal = key
+
+    requestAnimationFrame(() => {
+      const rtCanvas = document.getElementById('detail-chart-rt')
+      const hourlyCanvas = document.getElementById('detail-chart-hourly')
+      const distCanvas = document.getElementById('detail-chart-dist')
+      const uptimeCanvas = document.getElementById('detail-chart-uptime')
+
+      if (rtCanvas) Charts.drawResponseTimeChart(rtCanvas, history)
+      if (hourlyCanvas) Charts.drawHourlyBarChart(hourlyCanvas, hourly)
+      if (distCanvas) Charts.drawResponseTimeDistribution(distCanvas, rtBuckets)
+      if (uptimeCanvas) Charts.drawDailyUptimeChart(uptimeCanvas, dailyUptime)
+    })
   }
 
-  function updateLastRefresh() {
-    const el = document.getElementById('last-refresh')
-    if (el) el.textContent = formatTime(new Date())
+  function closeDetailModal() {
+    const modal = document.getElementById('detail-modal')
+    modal.classList.remove('open')
+    document.body.style.overflow = ''
+    activeModal = null
   }
 
-  /* ── CHECKING STATE ────────────────────────────────────────────────────── */
+  function setupModalEvents() {
+    const modal = document.getElementById('detail-modal')
+    modal.querySelector('.modal-close').addEventListener('click', closeDetailModal)
+    modal.querySelector('.modal-overlay').addEventListener('click', closeDetailModal)
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && activeModal) closeDetailModal()
+    })
+  }
+
+  /* ── CHECKING STATE ──────────────────────────────────────────────────── */
   function setCheckingState(checking) {
     const pollStatus = document.querySelector('.poll-status')
     const refreshIcon = document.getElementById('refresh-icon')
@@ -226,13 +339,12 @@ const App = (() => {
     }
   }
 
-  /* ── MANUAL REFRESH ────────────────────────────────────────────────────── */
   function manualRefresh() {
     if (isRefreshing) return
     refreshAll()
   }
 
-  /* ── POLLING ───────────────────────────────────────────────────────────── */
+  /* ── POLLING ─────────────────────────────────────────────────────────── */
   function startPolling() {
     resetCountdown()
     pollTimer = setInterval(refreshAll, POLL_INTERVAL_MS)
@@ -257,7 +369,7 @@ const App = (() => {
     if (el) el.textContent = `Auto-refresh in ${min}:${String(sec).padStart(2, '0')}`
   }
 
-  /* ── SEARCH / FILTER ───────────────────────────────────────────────────── */
+  /* ── SEARCH / FILTER ─────────────────────────────────────────────────── */
   function filterCards() {
     const query = document.getElementById('search-input').value.toLowerCase().trim()
     const cards = document.querySelectorAll('.api-card')
@@ -269,19 +381,18 @@ const App = (() => {
     })
   }
 
-  /* ── CHARTS REDRAW ─────────────────────────────────────────────────────── */
+  /* ── CHARTS REDRAW ───────────────────────────────────────────────────── */
   function redrawAllCharts() {
     const endpoints = API.getEndpoints()
     endpoints.forEach(ep => {
       const canvas = document.getElementById(`chart-${ep.key}`)
       const history = Storage.getHistory(ep.key)
-      if (canvas && history.length > 0) {
-        Charts.drawSparkline(canvas, history)
-      }
+      if (canvas && history.length > 0) Charts.drawSparkline(canvas, history)
     })
+    if (activeModal) openDetailModal(activeModal)
   }
 
-  /* ── HELPERS ───────────────────────────────────────────────────────────── */
+  /* ── HELPERS ─────────────────────────────────────────────────────────── */
   function formatRelativeTime(isoString) {
     if (!isoString) return '—'
     const diff = Math.round((Date.now() - new Date(isoString).getTime()) / 1000)
@@ -291,22 +402,16 @@ const App = (() => {
     return `${Math.floor(diff / 3600)}h ago`
   }
 
-  function formatTime(date) {
-    return date.toLocaleTimeString('en-IN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true,
-    })
-  }
-
   function updateFooterYear() {
     const el = document.getElementById('footer-year')
     if (el) el.textContent = new Date().getFullYear()
   }
 
-  /* ── BOOT ──────────────────────────────────────────────────────────────── */
-  document.addEventListener('DOMContentLoaded', init)
+  /* ── BOOT ────────────────────────────────────────────────────────────── */
+  document.addEventListener('DOMContentLoaded', () => {
+    init()
+    setupModalEvents()
+  })
 
   return { refreshAll, toggleTheme }
 })()
