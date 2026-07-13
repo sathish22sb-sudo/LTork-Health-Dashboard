@@ -158,10 +158,19 @@ const App = (() => {
     isRefreshing = true
     setCheckingState(true)
 
+    const safetyTimer = setTimeout(() => {
+      isRefreshing = false
+      setCheckingState(false)
+    }, 15000)
+
     try {
       const results = await API.checkAll()
       for (const result of results) {
-        processResult(result)
+        try {
+          processResult(result)
+        } catch (e) {
+          console.error('Error processing result for', result.key, e)
+        }
       }
       renderSummaryCards()
       updateSummaryFromResults(results)
@@ -170,6 +179,7 @@ const App = (() => {
       console.error('Refresh failed:', e)
       Notifications.showToast('Failed to refresh health status', 'error')
     } finally {
+      clearTimeout(safetyTimer)
       isRefreshing = false
       setCheckingState(false)
       resetCountdown()
@@ -340,7 +350,10 @@ const App = (() => {
   }
 
   function manualRefresh() {
-    if (isRefreshing) return
+    if (isRefreshing) {
+      isRefreshing = false
+      setCheckingState(false)
+    }
     refreshAll()
   }
 
