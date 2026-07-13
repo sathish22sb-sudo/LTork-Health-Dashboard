@@ -2,16 +2,19 @@
 /* EmailJS integration for health alert emails.                                 */
 
 const Email = (() => {
-  /* ── Configuration — update these after creating templates in EmailJS ──── */
+  /* ── Configuration — update these after creating your EmailJS account ──── */
+  /* Sign up at https://www.emailjs.com with sathishsb.22@gmail.com,       */
+  /* connect your Gmail as an email service, then paste your IDs below.    */
   const CONFIG = {
-    PUBLIC_KEY: 'fZQUFQff4QwX2i_ky',
-    SERVICE_ID: 'service_xz7b2qp',
+    PUBLIC_KEY: 'YOUR_PUBLIC_KEY',
+    SERVICE_ID: 'YOUR_SERVICE_ID',
     DOWN_TEMPLATE_ID: 'YOUR_DOWN_TEMPLATE_ID',
     RECOVERY_TEMPLATE_ID: 'YOUR_RECOVERY_TEMPLATE_ID',
   }
 
   const RECIPIENTS = [
-    'sathishsb.22@gmail.com',
+    'sathishsrini499@gmail.com',
+    'freelearner505@gmail.com',
   ]
 
   let initialized = false
