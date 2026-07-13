@@ -11,8 +11,7 @@ const Email = (() => {
   }
 
   const RECIPIENTS = [
-    'sathishsrini499@gmail.com',
-    'freelearner505@gmail.com',
+    'sathishsb.22@gmail.com',
   ]
 
   let initialized = false
